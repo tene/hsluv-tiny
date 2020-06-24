@@ -1,4 +1,6 @@
-A Rust implementation of [HSLuv](http://www.hsluv.org).
+A Rust implementation of [HSLuv](http://www.hsluv.org) optimized for embedded devices without FPU.
+
+This is a fork of https://github.com/dvdplm/rust-hsluv modified to use fixed-point math and lookup tables.
 
 ## Demo
 
@@ -12,8 +14,14 @@ Add this line to your application's Cargo.toml:
 
 ```toml
 [dependencies]
-hsluv = "0.1.2"
+hsluv-tiny = { git = "https://github.com/tene/hsluv-tiny" }
 ```
+
+## TODO
+
+- Refactor to use Fixed-point numbers with LUT
+- Refactor into 0-1 domain for all inputs
+- Rewrite the rest of this Readme
 
 ## Usage
 

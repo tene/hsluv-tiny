@@ -8,10 +8,23 @@ categories = ["encoding", "rendering", "multimedia::images"]
 license = "MIT"
 version = "0.1.4"
 authors = ["David Palm <dvdplm@gmail.com>"]
-editi0n = "2018"
+edition = "2018"
 
 [lib]
 name = "hsluv"
+
+[dependencies.fixed]
+version = "*"
+features = ["az"]
+
+[dependencies.heapless]
+version = "*"
+features = ["ufmt-impl"]
+
+[dependencies.num-traits]
+version = "*"
+default-features = false
+features = ["libm"]
 
 [dev-dependencies]
 serde = "1.0"
