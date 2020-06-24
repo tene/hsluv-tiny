@@ -12,20 +12,20 @@ mod tests {
 
     #[derive(Deserialize, Debug)]
     struct ColorTest {
-        rgb: (f64, f64, f64),
-        xyz: (f64, f64, f64),
-        luv: (f64, f64, f64),
-        lch: (f64, f64, f64),
-        hsluv: (f64, f64, f64),
-        hpluv: (f64, f64, f64),
+        rgb: (f32, f32, f32),
+        xyz: (f32, f32, f32),
+        luv: (f32, f32, f32),
+        lch: (f32, f32, f32),
+        hsluv: (f32, f32, f32),
+        hpluv: (f32, f32, f32),
     }
 
     use std::fs::File;
     use std::io::Read;
 
-    static TOLERANCE: f64 = 1e-11;
+    static TOLERANCE: f32 = 0.1;
 
-    fn assert_is_close_enough(val: (f64, f64, f64), expected: (f64, f64, f64)) {
+    fn assert_is_close_enough(val: (f32, f32, f32), expected: (f32, f32, f32)) {
         let (v1, v2, v3) = val;
         let (e1, e2, e3) = expected;
 
@@ -33,10 +33,11 @@ mod tests {
         let dev2 = (v2 - e2).abs();
         let dev3 = (v3 - e3).abs();
         if dev1 >= TOLERANCE || dev2 >= TOLERANCE || dev3 >= TOLERANCE {
+            let deviation = dev1.max(dev2).max(dev3);
             // println!("\nValue is deviating.\nvalue:    {:?}\nexpected: {:?}\ndeviation: {:?}", val, expected, (dev1, dev2, dev3))
             panic!(
-                "value {:?} deviates too much from the expected: {:?}",
-                val, expected
+                "value {:?} deviates too much from the expected: {:?}\ndeviation: {}",
+                val, expected, deviation
             );
         }
     }
