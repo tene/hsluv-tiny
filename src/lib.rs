@@ -24,6 +24,175 @@ const REF_V: f32 = 0.46831999493879;
 const KAPPA: f32 = 903.2962962;
 const EPSILON: f32 = 0.0088564516;
 
+#[derive(Copy, Clone, PartialEq)]
+pub struct Hsluv {
+    pub h: f32,
+    pub s: f32,
+    pub l: f32,
+}
+
+impl Hsluv {
+    pub fn new(h: f32, s: f32, l: f32) -> Self {
+        Self { h, s, l }
+    }
+    pub fn to_rgb(self) -> Rgb {
+        self.to_lch().to_luv().to_xyz().to_rgb()
+    }
+    pub fn to_lch(self) -> Lch {
+        match self.l {
+            l if l > 99.9999999 => Lch::new(100.0, 0.0, self.h),
+            l if l < 0.00000001 => Lch::new(0.0, 0.0, self.h),
+            _ => {
+                let mx = max_chroma_for(self.l, self.h);
+                let c = mx / 100.0 * self.s;
+                Lch::new(self.l, c, self.h)
+            }
+        }
+    }
+}
+
+impl Into<(f32, f32, f32)> for Hsluv {
+    fn into(self) -> (f32, f32, f32) {
+        (self.h, self.s, self.l)
+    }
+}
+
+impl From<(f32, f32, f32)> for Hsluv {
+    fn from(triple: (f32, f32, f32)) -> Self {
+        Self::new(triple.0, triple.1, triple.2)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub struct Lch {
+    pub l: f32,
+    pub c: f32,
+    pub h: f32,
+}
+
+impl Lch {
+    pub fn new(l: f32, c: f32, h: f32) -> Self {
+        Self { l, c, h }
+    }
+    /// Convert LCH to LUV
+    pub fn to_luv(self) -> Luv {
+        let hrad = degrees_to_radians(self.h);
+        let u = hrad.cos() * self.c;
+        let v = hrad.sin() * self.c;
+
+        Luv::new(self.l, u, v)
+    }
+}
+
+impl Into<(f32, f32, f32)> for Lch {
+    fn into(self) -> (f32, f32, f32) {
+        (self.l, self.c, self.h)
+    }
+}
+
+impl From<(f32, f32, f32)> for Lch {
+    fn from(triple: (f32, f32, f32)) -> Self {
+        Self::new(triple.0, triple.1, triple.2)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub struct Luv {
+    pub l: f32,
+    pub u: f32,
+    pub v: f32,
+}
+
+impl Luv {
+    pub fn new(l: f32, u: f32, v: f32) -> Self {
+        Self { l, u, v }
+    }
+    pub fn to_xyz(self) -> Xyz {
+        let Self { l, u, v } = self;
+        if self.l == 0.0 {
+            return Xyz::new(0.0, 0.0, 0.0);
+        }
+
+        let var_y = f_inv(l);
+        let var_u = u / (13.0 * l) + REF_U;
+        let var_v = v / (13.0 * l) + REF_V;
+
+        let y = var_y * REF_Y;
+        let x = 0.0 - (9.0 * y * var_u) / ((var_u - 4.0) * var_v - var_u * var_v);
+        let z = (9.0 * y - (15.0 * var_v * y) - (var_v * x)) / (3.0 * var_v);
+
+        Xyz::new(x, y, z)
+    }
+}
+
+impl Into<(f32, f32, f32)> for Luv {
+    fn into(self) -> (f32, f32, f32) {
+        (self.l, self.u, self.v)
+    }
+}
+
+impl From<(f32, f32, f32)> for Luv {
+    fn from(triple: (f32, f32, f32)) -> Self {
+        Self::new(triple.0, triple.1, triple.2)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub struct Xyz {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Xyz {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
+    pub fn to_rgb(self) -> Rgb {
+        let xyz = [self.x, self.y, self.z];
+        let r = from_linear(dot_product(&M[0], &xyz));
+        let g = from_linear(dot_product(&M[1], &xyz));
+        let b = from_linear(dot_product(&M[2], &xyz));
+        Rgb::new(r, g, b)
+    }
+}
+impl Into<(f32, f32, f32)> for Xyz {
+    fn into(self) -> (f32, f32, f32) {
+        (self.x, self.y, self.z)
+    }
+}
+
+impl From<(f32, f32, f32)> for Xyz {
+    fn from(triple: (f32, f32, f32)) -> Self {
+        Self::new(triple.0, triple.1, triple.2)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub struct Rgb {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+}
+
+impl Rgb {
+    pub fn new(r: f32, g: f32, b: f32) -> Self {
+        Self { r, g, b }
+    }
+}
+
+impl Into<(f32, f32, f32)> for Rgb {
+    fn into(self) -> (f32, f32, f32) {
+        (self.r, self.g, self.b)
+    }
+}
+
+impl From<(f32, f32, f32)> for Rgb {
+    fn from(triple: (f32, f32, f32)) -> Self {
+        Self::new(triple.0, triple.1, triple.2)
+    }
+}
+
 /// Convert HSLUV to HEX
 pub fn hsluv_to_hex(hsl: (f32, f32, f32)) -> String<U7> {
     rgb_to_hex(hsluv_to_rgb(hsl))
@@ -44,20 +213,6 @@ pub fn hex_to_hpluv(hex: &str) -> (f32, f32, f32) {
     rgb_to_hpluv(hex_to_rgb(hex))
 }
 
-/// Convert HSLUV to LCH
-pub fn hsluv_to_lch(hsl: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (h, s, l) = hsl;
-    match l {
-        l if l > 99.9999999 => (100.0, 0.0, h),
-        l if l < 0.00000001 => (0.0, 0.0, h),
-        _ => {
-            let mx = max_chroma_for(l, h);
-            let c = mx / 100.0 * s;
-            (l, c, h)
-        }
-    }
-}
-
 /// Convert HPLUV to LCH
 pub fn hpluv_to_lch(hpl: (f32, f32, f32)) -> (f32, f32, f32) {
     let (h, p, l) = hpl;
@@ -70,16 +225,6 @@ pub fn hpluv_to_lch(hpl: (f32, f32, f32)) -> (f32, f32, f32) {
             (l, c, h)
         }
     }
-}
-
-/// Convert LCH to LUV
-pub fn lch_to_luv(lch: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (l, c, h) = lch;
-    let hrad = degrees_to_radians(h);
-    let u = hrad.cos() * c;
-    let v = hrad.sin() * c;
-
-    (l, u, v)
 }
 
 /// Convert LCH to HSLUV
@@ -110,6 +255,18 @@ pub fn lch_to_hpluv(lch: (f32, f32, f32)) -> (f32, f32, f32) {
     }
 }
 
+pub fn hsluv_to_lch(hsl: (f32, f32, f32)) -> (f32, f32, f32) {
+    let hsl: Hsluv = hsl.into();
+    let lch = hsl.to_lch();
+    lch.into()
+}
+
+pub fn lch_to_luv(lch: (f32, f32, f32)) -> (f32, f32, f32) {
+    let lch: Lch = lch.into();
+    let luv = lch.to_luv();
+    luv.into()
+}
+
 /// Convert LCH to RGB
 pub fn lch_to_rgb(lch: (f32, f32, f32)) -> (f32, f32, f32) {
     xyz_to_rgb(luv_to_xyz(lch_to_luv(lch)))
@@ -127,30 +284,16 @@ pub fn hpluv_to_rgb(hsl: (f32, f32, f32)) -> (f32, f32, f32) {
 
 /// Convert XYZ to RGB
 pub fn xyz_to_rgb(xyz: (f32, f32, f32)) -> (f32, f32, f32) {
-    let xyz = [xyz.0, xyz.1, xyz.2];
-    let r = from_linear(dot_product(&M[0], &xyz));
-    let g = from_linear(dot_product(&M[1], &xyz));
-    let b = from_linear(dot_product(&M[2], &xyz));
-    (r, g, b)
+    let xyz: Xyz = xyz.into();
+    let rgb = xyz.to_rgb();
+    rgb.into()
 }
 
 /// Convert LUV to XYZ
 pub fn luv_to_xyz(luv: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (l, u, v) = luv;
-
-    if l == 0.0 {
-        return (0.0, 0.0, 0.0);
-    }
-
-    let var_y = f_inv(l);
-    let var_u = u / (13.0 * l) + REF_U;
-    let var_v = v / (13.0 * l) + REF_V;
-
-    let y = var_y * REF_Y;
-    let x = 0.0 - (9.0 * y * var_u) / ((var_u - 4.0) * var_v - var_u * var_v);
-    let z = (9.0 * y - (15.0 * var_v * y) - (var_v * x)) / (3.0 * var_v);
-
-    (x, y, z)
+    let luv: Luv = luv.into();
+    let xyz = luv.to_xyz();
+    xyz.into()
 }
 
 /// Convert XYZ to LUV
