@@ -3,7 +3,7 @@ extern crate serde_derive;
 
 #[cfg(test)]
 mod tests {
-    extern crate hsluv;
+    use hsluv_tiny;
     extern crate serde;
     extern crate serde_json;
 
@@ -23,16 +23,15 @@ mod tests {
     use std::fs::File;
     use std::io::Read;
 
-    static TOLERANCE: f32 = 0.1;
-
     fn assert_is_close_enough(val: (f32, f32, f32), expected: (f32, f32, f32)) {
+        let tolerance: f32 = 0.1;
         let (v1, v2, v3) = val;
         let (e1, e2, e3) = expected;
 
         let dev1 = (v1 - e1).abs();
         let dev2 = (v2 - e2).abs();
         let dev3 = (v3 - e3).abs();
-        if dev1 >= TOLERANCE || dev2 >= TOLERANCE || dev3 >= TOLERANCE {
+        if dev1 >= tolerance || dev2 >= tolerance || dev3 >= tolerance {
             let deviation = dev1.max(dev2).max(dev3);
             // println!("\nValue is deviating.\nvalue:    {:?}\nexpected: {:?}\ndeviation: {:?}", val, expected, (dev1, dev2, dev3))
             panic!(
@@ -65,24 +64,24 @@ mod tests {
         };
 
         for (hex, c) in colors {
-            assert_is_close_enough(hsluv::rgb_to_xyz(c.rgb), c.xyz);
-            assert_is_close_enough(hsluv::xyz_to_luv(c.xyz), c.luv);
-            assert_is_close_enough(hsluv::luv_to_lch(c.luv), c.lch);
-            assert_is_close_enough(hsluv::lch_to_hsluv(c.lch), c.hsluv);
+            assert_is_close_enough(hsluv_tiny::rgb_to_xyz(c.rgb), c.xyz);
+            assert_is_close_enough(hsluv_tiny::xyz_to_luv(c.xyz), c.luv);
+            assert_is_close_enough(hsluv_tiny::luv_to_lch(c.luv), c.lch);
+            assert_is_close_enough(hsluv_tiny::lch_to_hsluv(c.lch), c.hsluv);
 
             // backward
-            assert_is_close_enough(hsluv::lch_to_hpluv(c.lch), c.hpluv);
-            assert_is_close_enough(hsluv::hpluv_to_lch(c.hpluv), c.lch);
-            assert_is_close_enough(hsluv::hsluv_to_lch(c.hsluv), c.lch);
-            assert_is_close_enough(hsluv::lch_to_luv(c.lch), c.luv);
-            assert_is_close_enough(hsluv::luv_to_xyz(c.luv), c.xyz);
-            assert_is_close_enough(hsluv::xyz_to_rgb(c.xyz), c.rgb);
+            assert_is_close_enough(hsluv_tiny::lch_to_hpluv(c.lch), c.hpluv);
+            assert_is_close_enough(hsluv_tiny::hpluv_to_lch(c.hpluv), c.lch);
+            assert_is_close_enough(hsluv_tiny::hsluv_to_lch(c.hsluv), c.lch);
+            assert_is_close_enough(hsluv_tiny::lch_to_luv(c.lch), c.luv);
+            assert_is_close_enough(hsluv_tiny::luv_to_xyz(c.luv), c.xyz);
+            assert_is_close_enough(hsluv_tiny::xyz_to_rgb(c.xyz), c.rgb);
 
             // Others
-            assert_eq!(hsluv::hsluv_to_hex(c.hsluv).as_str(), hex);
-            assert_eq!(hsluv::hpluv_to_hex(c.hpluv).as_str(), hex);
-            assert_is_close_enough(hsluv::hex_to_hsluv(&hex), c.hsluv);
-            assert_is_close_enough(hsluv::hex_to_hpluv(&hex), c.hpluv);
+            assert_eq!(hsluv_tiny::hsluv_to_hex(c.hsluv).as_str(), hex);
+            assert_eq!(hsluv_tiny::hpluv_to_hex(c.hpluv).as_str(), hex);
+            assert_is_close_enough(hsluv_tiny::hex_to_hsluv(&hex), c.hsluv);
+            assert_is_close_enough(hsluv_tiny::hex_to_hpluv(&hex), c.hpluv);
         }
     }
 }

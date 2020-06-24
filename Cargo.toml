@@ -1,17 +1,20 @@
 [package]
-name = "rust-hsluv"
+name = "hsluv-tiny"
 description = "Color converstions. Convert to/from various color representations: hex, rgb, hsluv, hpluv, lch and xyz."
-repository = "https://github.com/dvdplm/rust-hsluv"
+repository = "https://github.com/tene/hsluv-tiny"
 readme = "README.md"
-keywords = ["hsluv", "hpluv", "color", "conversion"]
+keywords = ["hsluv", "hpluv", "color", "conversion", "no_std"]
 categories = ["encoding", "rendering", "multimedia::images"]
 license = "MIT"
-version = "0.1.4"
-authors = ["David Palm <dvdplm@gmail.com>"]
+version = "0.0.1"
+authors = ["Stephen Weeks <tene@allalone.org>"]
 edition = "2018"
 
 [lib]
-name = "hsluv"
+name = "hsluv_tiny"
+
+[dependencies]
+az = "*"
 
 [dependencies.fixed]
 version = "*"
@@ -30,3 +33,7 @@ features = ["libm"]
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
+
+[dev-dependencies.fixed]
+version = "*"
+features = ["az", "serde"]
