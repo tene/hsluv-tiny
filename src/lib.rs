@@ -64,6 +64,46 @@ impl From<(f32, f32, f32)> for Hsluv {
 }
 
 #[derive(Copy, Clone, PartialEq)]
+pub struct Hpluv {
+    pub h: f32,
+    pub p: f32,
+    pub l: f32,
+}
+
+impl Hpluv {
+    pub fn new(h: f32, p: f32, l: f32) -> Self {
+        Self { h, p, l }
+    }
+    pub fn to_rgb(self) -> Rgb {
+        self.to_lch().to_luv().to_xyz().to_rgb()
+    }
+    pub fn to_lch(self) -> Lch {
+        let Self { h, p, l } = self;
+        match l {
+            l if l > 99.9999999 => Lch::new(100.0, 0.0, h),
+            l if l < 0.00000001 => Lch::new(0.0, 0.0, h),
+            _ => {
+                let mx = max_safe_chroma_for(l);
+                let c = mx / 100.0 * p;
+                Lch::new(l, c, h)
+            }
+        }
+    }
+}
+
+impl Into<(f32, f32, f32)> for Hpluv {
+    fn into(self) -> (f32, f32, f32) {
+        (self.h, self.p, self.l)
+    }
+}
+
+impl From<(f32, f32, f32)> for Hpluv {
+    fn from(triple: (f32, f32, f32)) -> Self {
+        Self::new(triple.0, triple.1, triple.2)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
 pub struct Lch {
     pub l: f32,
     pub c: f32,
@@ -81,6 +121,30 @@ impl Lch {
         let v = hrad.sin() * self.c;
 
         Luv::new(self.l, u, v)
+    }
+    pub fn to_hsluv(self) -> Hsluv {
+        let Lch { l, c, h } = self;
+        match l {
+            l if l > 99.99 => (h, 0.0, 100.0).into(),
+            l if l < 0.001 => (h, 0.0, 0.0).into(),
+            _ => {
+                let mx = max_chroma_for(l, h);
+                let s = c / mx * 100.0;
+                (h, s, l).into()
+            }
+        }
+    }
+    pub fn to_hpluv(self) -> Hpluv {
+        let Lch { l, c, h } = self;
+        match l {
+            l if l > 99.99 => (h, 0.0, 100.0).into(),
+            l if l < 0.001 => (h, 0.0, 0.0).into(),
+            _ => {
+                let mx = max_safe_chroma_for(l);
+                let s = c / mx * 100.0;
+                (h, s, l).into()
+            }
+        }
     }
 }
 
@@ -123,6 +187,20 @@ impl Luv {
 
         Xyz::new(x, y, z)
     }
+    pub fn to_lch(self) -> Lch {
+        let Luv { l, u, v } = self;
+        let c = (u * u + v * v).sqrt();
+        if c < 0.001 {
+            (l, c, 0.0).into()
+        } else {
+            let hrad = f32::atan2(v, u);
+            let mut h = radians_to_degrees(hrad);
+            if h < 0.0 {
+                h += 360.0;
+            }
+            (l, c, h).into()
+        }
+    }
 }
 
 impl Into<(f32, f32, f32)> for Luv {
@@ -155,6 +233,21 @@ impl Xyz {
         let b = from_linear(dot_product(&M[2], &xyz));
         Rgb::new(r, g, b)
     }
+    pub fn to_luv(self) -> Luv {
+        let Xyz { x, y, z } = self;
+        let l = f(y);
+
+        if l == 0.0 || ((x, y, z) == (0.0, 0.0, 0.0)) {
+            return (0.0, 0.0, 0.0).into();
+        }
+
+        let var_u = (4.0 * x) / (x + (15.0 * y) + (3.0 * z));
+        let var_v = (9.0 * y) / (x + (15.0 * y) + (3.0 * z));
+        let u = 13.0 * l * (var_u - REF_U);
+        let v = 13.0 * l * (var_v - REF_V);
+
+        (l, u, v).into()
+    }
 }
 impl Into<(f32, f32, f32)> for Xyz {
     fn into(self) -> (f32, f32, f32) {
@@ -179,6 +272,46 @@ impl Rgb {
     pub fn new(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b }
     }
+    pub fn to_hex(self) -> String<U7> {
+        use core::fmt::Write;
+        let (r, g, b): (u8, u8, u8) = (clamp(self.r), clamp(self.g), clamp(self.b));
+        let mut rv = String::new();
+        let _ = write!(rv, "#{:02x}{:02x}{:02x}", r, g, b);
+        rv
+    }
+    pub fn from_hex(raw_hex: &str) -> Self {
+        let hex = raw_hex.trim_start_matches('#');
+        if hex.len() != 6 {
+            //panic!("Not a hex string!");
+            return (0.0, 0.0, 0.0).into();
+        }
+        let mut chunks = hex.as_bytes().chunks(2);
+        let red = i64::from_str_radix(str::from_utf8(chunks.next().unwrap()).unwrap(), 16);
+        let green = i64::from_str_radix(str::from_utf8(chunks.next().unwrap()).unwrap(), 16);
+        let blue = i64::from_str_radix(str::from_utf8(chunks.next().unwrap()).unwrap(), 16);
+        (
+            (red.unwrap_or(0) as f32) / 255.0,
+            (green.unwrap_or(0) as f32) / 255.0,
+            (blue.unwrap_or(0) as f32) / 255.0,
+        )
+            .into()
+    }
+    pub fn to_xyz(self) -> Xyz {
+        let rgbl = [to_linear(self.r), to_linear(self.g), to_linear(self.b)];
+        let x = dot_product(&M_INV[0], &rgbl);
+        let y = dot_product(&M_INV[1], &rgbl);
+        let z = dot_product(&M_INV[2], &rgbl);
+        (x, y, z).into()
+    }
+    pub fn to_lch(self) -> Lch {
+        self.to_xyz().to_luv().to_lch()
+    }
+    pub fn to_hsluv(self) -> Hsluv {
+        self.to_lch().to_hsluv()
+    }
+    pub fn to_hpluv(self) -> Hpluv {
+        self.to_lch().to_hpluv()
+    }
 }
 
 impl Into<(f32, f32, f32)> for Rgb {
@@ -195,127 +328,80 @@ impl From<(f32, f32, f32)> for Rgb {
 
 /// Convert HSLUV to HEX
 pub fn hsluv_to_hex(hsl: (f32, f32, f32)) -> String<U7> {
-    rgb_to_hex(hsluv_to_rgb(hsl))
+    Hsluv::from(hsl).to_rgb().to_hex()
 }
 
 /// Convert HPLUV to HEX
 pub fn hpluv_to_hex(hsl: (f32, f32, f32)) -> String<U7> {
-    rgb_to_hex(hpluv_to_rgb(hsl))
+    Hpluv::from(hsl).to_rgb().to_hex()
 }
 
 /// Convert HEX to HSLUV
 pub fn hex_to_hsluv(hex: &str) -> (f32, f32, f32) {
-    rgb_to_hsluv(hex_to_rgb(hex))
+    Rgb::from_hex(hex).to_hsluv().into()
 }
 
 /// Convert HEX to HPLUV
 pub fn hex_to_hpluv(hex: &str) -> (f32, f32, f32) {
-    rgb_to_hpluv(hex_to_rgb(hex))
+    Rgb::from_hex(hex).to_hpluv().into()
 }
 
 /// Convert HPLUV to LCH
 pub fn hpluv_to_lch(hpl: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (h, p, l) = hpl;
-    match l {
-        l if l > 99.9999999 => (100.0, 0.0, h),
-        l if l < 0.00000001 => (0.0, 0.0, h),
-        _ => {
-            let mx = max_safe_chroma_for(l);
-            let c = mx / 100.0 * p;
-            (l, c, h)
-        }
-    }
+    Hpluv::from(hpl).to_lch().into()
 }
 
 /// Convert LCH to HSLUV
 pub fn lch_to_hsluv(lch: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (l, c, h) = lch;
-    match l {
-        l if l > 99.99 => (h, 0.0, 100.0),
-        l if l < 0.001 => (h, 0.0, 0.0),
-        _ => {
-            let mx = max_chroma_for(l, h);
-            let s = c / mx * 100.0;
-            (h, s, l)
-        }
-    }
+    Lch::from(lch).to_hsluv().into()
 }
 
 /// Convert LCH to HPLUV
 pub fn lch_to_hpluv(lch: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (l, c, h) = lch;
-    match l {
-        l if l > 99.99 => (h, 0.0, 100.0),
-        l if l < 0.001 => (h, 0.0, 0.0),
-        _ => {
-            let mx = max_safe_chroma_for(l);
-            let s = c / mx * 100.0;
-            (h, s, l)
-        }
-    }
+    Lch::from(lch).to_hpluv().into()
 }
 
 pub fn hsluv_to_lch(hsl: (f32, f32, f32)) -> (f32, f32, f32) {
-    let hsl: Hsluv = hsl.into();
-    let lch = hsl.to_lch();
-    lch.into()
+    Hsluv::from(hsl).to_lch().into()
 }
 
 pub fn lch_to_luv(lch: (f32, f32, f32)) -> (f32, f32, f32) {
-    let lch: Lch = lch.into();
-    let luv = lch.to_luv();
-    luv.into()
+    Lch::from(lch).to_luv().into()
 }
 
 /// Convert LCH to RGB
 pub fn lch_to_rgb(lch: (f32, f32, f32)) -> (f32, f32, f32) {
-    xyz_to_rgb(luv_to_xyz(lch_to_luv(lch)))
+    Lch::from(lch).to_luv().to_xyz().to_rgb().into()
 }
 
 /// Convert HSLUV to RGB
 pub fn hsluv_to_rgb(hsl: (f32, f32, f32)) -> (f32, f32, f32) {
-    xyz_to_rgb(luv_to_xyz(lch_to_luv(hsluv_to_lch(hsl))))
+    Hsluv::from(hsl).to_lch().to_luv().to_xyz().to_rgb().into()
 }
 
 /// Convert HPLUV to RGB
 pub fn hpluv_to_rgb(hsl: (f32, f32, f32)) -> (f32, f32, f32) {
-    lch_to_rgb(hpluv_to_lch(hsl))
+    Hpluv::from(hsl).to_lch().to_luv().to_xyz().to_rgb().into()
 }
 
 /// Convert XYZ to RGB
 pub fn xyz_to_rgb(xyz: (f32, f32, f32)) -> (f32, f32, f32) {
-    let xyz: Xyz = xyz.into();
-    let rgb = xyz.to_rgb();
-    rgb.into()
+    Xyz::from(xyz).to_rgb().into()
 }
 
 /// Convert LUV to XYZ
 pub fn luv_to_xyz(luv: (f32, f32, f32)) -> (f32, f32, f32) {
-    let luv: Luv = luv.into();
-    let xyz = luv.to_xyz();
-    xyz.into()
+    Luv::from(luv).to_xyz().into()
 }
 
 /// Convert XYZ to LUV
 pub fn xyz_to_luv(xyz: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (x, y, z) = xyz;
-    let l = f(y);
-
-    if l == 0.0 || (xyz == (0.0, 0.0, 0.0)) {
-        return (0.0, 0.0, 0.0);
-    }
-
-    let var_u = (4.0 * x) / (x + (15.0 * y) + (3.0 * z));
-    let var_v = (9.0 * y) / (x + (15.0 * y) + (3.0 * z));
-    let u = 13.0 * l * (var_u - REF_U);
-    let v = 13.0 * l * (var_v - REF_V);
-
-    (l, u, v)
+    Xyz::from(xyz).to_luv().into()
 }
 
 /// Convert RGB to HSLUV
 pub fn rgb_to_hsluv(rgb: (f32, f32, f32)) -> (f32, f32, f32) {
-    lch_to_hsluv(rgb_to_lch(rgb))
+    Rgb::from(rgb).to_lch().to_hsluv().into()
 }
 
 /// Convert RGB to HPLUV
@@ -325,59 +411,27 @@ pub fn rgb_to_hpluv(rgb: (f32, f32, f32)) -> (f32, f32, f32) {
 
 /// Convert RGB to LCH
 pub fn rgb_to_lch(rgb: (f32, f32, f32)) -> (f32, f32, f32) {
-    luv_to_lch(xyz_to_luv(rgb_to_xyz(rgb)))
+    Rgb::from(rgb).to_lch().into()
 }
 
 /// Convert RGB to XYZ
 pub fn rgb_to_xyz(rgb: (f32, f32, f32)) -> (f32, f32, f32) {
-    let rgbl = [to_linear(rgb.0), to_linear(rgb.1), to_linear(rgb.2)];
-    let x = dot_product(&M_INV[0], &rgbl);
-    let y = dot_product(&M_INV[1], &rgbl);
-    let z = dot_product(&M_INV[2], &rgbl);
-    (x, y, z)
+    Rgb::from(rgb).to_xyz().into()
 }
 
 /// Convert LUV to LCH
 pub fn luv_to_lch(luv: (f32, f32, f32)) -> (f32, f32, f32) {
-    let (l, u, v) = luv;
-    let c = (u * u + v * v).sqrt();
-    if c < 0.001 {
-        (l, c, 0.0)
-    } else {
-        let hrad = f32::atan2(v, u);
-        let mut h = radians_to_degrees(hrad);
-        if h < 0.0 {
-            h += 360.0;
-        }
-        (l, c, h)
-    }
+    Luv::from(luv).to_lch().into()
 }
 
 /// Convert RGB to HEX
 pub fn rgb_to_hex(rgb: (f32, f32, f32)) -> String<U7> {
-    use core::fmt::Write;
-    let (r, g, b) = rgb_prepare(rgb);
-    let mut rv = String::new();
-    let _ = write!(rv, "#{:02x}{:02x}{:02x}", r, g, b);
-    rv
+    Rgb::from(rgb).to_hex()
 }
 
 /// Convert HEX to RGB
 pub fn hex_to_rgb(raw_hex: &str) -> (f32, f32, f32) {
-    let hex = raw_hex.trim_start_matches('#');
-    if hex.len() != 6 {
-        //panic!("Not a hex string!");
-        return (0.0, 0.0, 0.0);
-    }
-    let mut chunks = hex.as_bytes().chunks(2);
-    let red = i64::from_str_radix(str::from_utf8(chunks.next().unwrap()).unwrap(), 16);
-    let green = i64::from_str_radix(str::from_utf8(chunks.next().unwrap()).unwrap(), 16);
-    let blue = i64::from_str_radix(str::from_utf8(chunks.next().unwrap()).unwrap(), 16);
-    (
-        (red.unwrap_or(0) as f32) / 255.0,
-        (green.unwrap_or(0) as f32) / 255.0,
-        (blue.unwrap_or(0) as f32) / 255.0,
-    )
+    Rgb::from_hex(raw_hex).into()
 }
 
 fn f_inv(t: f32) -> f32 {
@@ -414,10 +468,6 @@ fn f(t: f32) -> f32 {
 
 fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b.iter()).map(|(i, j)| i * j).sum()
-}
-
-fn rgb_prepare(rgb: (f32, f32, f32)) -> (u8, u8, u8) {
-    (clamp(rgb.0), clamp(rgb.1), clamp(rgb.2))
 }
 
 fn clamp(v: f32) -> u8 {
